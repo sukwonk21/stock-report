@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container { max-width: 1400px; margin: 0 auto; }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6366f1, #10b981);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p {
+      color: #64748b;
+      margin-top: 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    /* Summary cards */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      border: 1px solid #334155;
+    }
+    .card .ticker-label {
+      font-size: 0.75rem;
+      color: #64748b;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .card .price {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin: 0.3rem 0 0.2rem;
+    }
+    .card .change {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .card .meta {
+      font-size: 0.72rem;
+      color: #64748b;
+      margin-top: 0.35rem;
+      line-height: 1.5;
+    }
+    .pos { color: #10b981; }
+    .neg { color: #ef4444; }
+
+    /* Charts grid */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+    @media (max-width: 900px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+    .chart-card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid #334155;
+    }
+    .chart-card.full-width {
+      grid-column: 1 / -1;
+    }
+    .chart-card h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1.2rem;
+    }
+    .chart-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    /* Summary table */
+    .table-card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid #334155;
+      overflow-x: auto;
+    }
+    .table-card h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1.2rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    thead th {
+      text-align: left;
+      padding: 0.6rem 1rem;
+      color: #64748b;
+      font-weight: 600;
+      border-bottom: 1px solid #334155;
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-bottom: 1px solid #1e293b;
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: #263348; }
+    tbody td {
+      padding: 0.65rem 1rem;
+      white-space: nowrap;
+    }
+    td.ticker-col { font-weight: 700; color: #a5b4fc; }
+    td.num { text-align: right; }
+
+    footer {
+      text-align: center;
+      color: #334155;
+      font-size: 0.8rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>{{ title }}</h1>
+    <p>Generated {{ generated_at }} &nbsp;·&nbsp; Data from Yahoo Finance</p>
+  </header>
+
+  <!-- Summary Cards -->
+  <div class="cards">
+    {% for s in stock_list %}
+    <div class="card">
+      <div class="ticker-label">{{ s.ticker }}</div>
+      <div class="price">${{ "%.2f"|format(s.close) }}</div>
+      <div class="change {% if s.daily_change_pct >= 0 %}pos{% else %}neg{% endif %}">
+        {% if s.daily_change_pct >= 0 %}▲{% else %}▼{% endif %}
+        {{ "%.2f"|format(s.daily_change_pct|abs) }}%
+      </div>
+      <div class="meta">
+        Vol: {{ s.volume_fmt }}<br>
+        Cap: {{ s.market_cap_fmt }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-grid">
+
+    <!-- 1. Daily % Change (horizontal bar) -->
+    <div class="chart-card">
+      <h2>Daily % Change</h2>
+      <div class="chart-wrapper" style="height:320px">
+        <canvas id="dailyChangeChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 3. Volume Today (bar) -->
+    <div class="chart-card">
+      <h2>Volume Today</h2>
+      <div class="chart-wrapper" style="height:320px">
+        <canvas id="volumeChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 2. 30-Day Price History (multi-line, full width) -->
+    <div class="chart-card full-width">
+      <h2>30-Day Price History (Normalized % from Start)</h2>
+      <div class="chart-wrapper" style="height:360px">
+        <canvas id="historyChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 4. 52-Week Range (floating bar, full width) -->
+    <div class="chart-card full-width">
+      <h2>52-Week Range (Low → High) with Current Price</h2>
+      <div class="chart-wrapper" style="height:320px">
+        <canvas id="fiftyTwoChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Summary Table -->
+  <div class="table-card">
+    <h2>Summary Table</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th class="num">Price</th>
+          <th class="num">Change</th>
+          <th class="num">Open</th>
+          <th class="num">High</th>
+          <th class="num">Low</th>
+          <th class="num">52W High</th>
+          <th class="num">52W Low</th>
+          <th class="num">Volume</th>
+          <th class="num">Market Cap</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in stock_list %}
+        <tr>
+          <td class="ticker-col">{{ s.ticker }}</td>
+          <td class="num">${{ "%.2f"|format(s.close) }}</td>
+          <td class="num {% if s.daily_change_pct >= 0 %}pos{% else %}neg{% endif %}">
+            {% if s.daily_change_pct >= 0 %}+{% endif %}{{ "%.2f"|format(s.daily_change_pct) }}%
+          </td>
+          <td class="num">${{ "%.2f"|format(s.open) }}</td>
+          <td class="num">${{ "%.2f"|format(s.high) }}</td>
+          <td class="num">${{ "%.2f"|format(s.low) }}</td>
+          <td class="num">${{ "%.2f"|format(s.fifty_two_week_high) }}</td>
+          <td class="num">${{ "%.2f"|format(s.fifty_two_week_low) }}</td>
+          <td class="num">{{ s.volume_fmt }}</td>
+          <td class="num">{{ s.market_cap_fmt }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <p>Data sourced from Yahoo Finance via yfinance. Not financial advice.</p>
+  </footer>
+</div>
+
+<script>
+  const TICKERS = {{ tickers_json }};
+  const DAILY_CHANGE = {{ daily_change_json }};
+  const DAILY_CHANGE_COLORS = {{ daily_change_colors_json }};
+  const HISTORY_DATES = {{ history_dates_json }};
+  const HISTORY_SERIES = {{ history_series_json }};
+  const VOLUME = {{ volume_json }};
+  const VOLUME_COLORS = {{ volume_colors_json }};
+  const FTW_LABELS = {{ fifty_two_labels_json }};
+  const FTW_LOW = {{ fifty_two_low_json }};
+  const FTW_HIGH = {{ fifty_two_high_json }};
+  const CURRENT_PRICES = {{ current_prices_json }};
+
+  const darkTheme = {
+    color: "#94a3b8",
+    grid: "#1e293b",
+    border: "#334155",
+  };
+
+  Chart.defaults.color = darkTheme.color;
+  Chart.defaults.borderColor = darkTheme.border;
+
+  // ── 1. Daily % Change ─────────────────────────────────────────
+  new Chart(document.getElementById("dailyChangeChart"), {
+    type: "bar",
+    data: {
+      labels: TICKERS,
+      datasets: [{
+        label: "Daily % Change",
+        data: DAILY_CHANGE,
+        backgroundColor: DAILY_CHANGE_COLORS,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.raw >= 0 ? "+" : ""}${ctx.raw.toFixed(2)}%`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: darkTheme.border },
+          ticks: { callback: v => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%` }
+        },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+
+  // ── 2. 30-Day Price History ────────────────────────────────────
+  new Chart(document.getElementById("historyChart"), {
+    type: "line",
+    data: {
+      labels: HISTORY_DATES,
+      datasets: HISTORY_SERIES,
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          position: "top",
+          labels: { boxWidth: 12, padding: 16 }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.raw != null ? (ctx.raw >= 0 ? "+" : "") + ctx.raw.toFixed(2) + "%" : "N/A"}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: darkTheme.border },
+          ticks: {
+            maxTicksLimit: 8,
+            maxRotation: 0,
+          }
+        },
+        y: {
+          grid: { color: darkTheme.border },
+          ticks: { callback: v => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%` }
+        }
+      }
+    }
+  });
+
+  // ── 3. Volume Today ───────────────────────────────────────────
+  new Chart(document.getElementById("volumeChart"), {
+    type: "bar",
+    data: {
+      labels: TICKERS,
+      datasets: [{
+        label: "Volume",
+        data: VOLUME,
+        backgroundColor: VOLUME_COLORS,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.raw;
+              if (v >= 1e9) return ` ${(v/1e9).toFixed(2)}B shares`;
+              if (v >= 1e6) return ` ${(v/1e6).toFixed(2)}M shares`;
+              if (v >= 1e3) return ` ${(v/1e3).toFixed(1)}K shares`;
+              return ` ${v} shares`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          grid: { color: darkTheme.border },
+          ticks: {
+            callback: v => {
+              if (v >= 1e9) return `${(v/1e9).toFixed(1)}B`;
+              if (v >= 1e6) return `${(v/1e6).toFixed(0)}M`;
+              return v;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // ── 4. 52-Week Range (floating bar) ───────────────────────────
+  // Chart.js floating bar: data = [[low, high]]
+  const floatingData = FTW_LOW.map((low, i) => [low, FTW_HIGH[i]]);
+
+  new Chart(document.getElementById("fiftyTwoChart"), {
+    type: "bar",
+    data: {
+      labels: FTW_LABELS,
+      datasets: [
+        {
+          label: "52-Week Range",
+          data: floatingData,
+          backgroundColor: "#6366f133",
+          borderColor: "#6366f1",
+          borderWidth: 1,
+          borderRadius: 3,
+        },
+        {
+          // Current price as a scatter overlay
+          type: "scatter",
+          label: "Current Price",
+          data: CURRENT_PRICES.map((price, i) => ({ x: i, y: price })),
+          backgroundColor: "#f59e0b",
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          showLine: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "top", labels: { boxWidth: 12, padding: 16 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              if (ctx.datasetIndex === 0) {
+                const [lo, hi] = ctx.raw;
+                return ` 52W: $${lo.toFixed(2)} – $${hi.toFixed(2)}`;
+              }
+              return ` Current: $${ctx.raw.y.toFixed(2)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          // Map scatter x index to tick labels
+          ticks: { callback: (_, i) => FTW_LABELS[i] ?? "" }
+        },
+        y: {
+          grid: { color: darkTheme.border },
+          ticks: { callback: v => `$${v.toLocaleString()}` }
+        }
+      }
+    }
+  });
+</script>
+</body>
+</html>
